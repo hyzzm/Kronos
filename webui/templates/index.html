@@ -975,24 +975,25 @@
             console.log('✅ Application initialization completed');
         }
 
-        // 恢复上次的模型/设备选择; 有记录且模型存在则返回 true
+        // 恢复上次的模型/设备选择; 无记录则默认第一个模型 + MPS; 有可用模型则返回 true
         function restoreModelPrefs() {
+            const deviceSelect = document.getElementById('device-select');
             const savedDevice = localStorage.getItem('kronos_device');
-            if (savedDevice) {
-                const deviceSelect = document.getElementById('device-select');
-                if ([...deviceSelect.options].some(o => o.value === savedDevice)) {
-                    deviceSelect.value = savedDevice;
-                }
+            if (savedDevice && [...deviceSelect.options].some(o => o.value === savedDevice)) {
+                deviceSelect.value = savedDevice;
+            } else if ([...deviceSelect.options].some(o => o.value === 'mps')) {
+                deviceSelect.value = 'mps';  // 默认 Apple 芯片加速
             }
+            
+            const modelSelect = document.getElementById('model-select');
             const savedModel = localStorage.getItem('kronos_model');
-            if (savedModel) {
-                const modelSelect = document.getElementById('model-select');
-                if ([...modelSelect.options].some(o => o.value === savedModel)) {
-                    modelSelect.value = savedModel;
-                    return true;
-                }
+            if (savedModel && [...modelSelect.options].some(o => o.value === savedModel)) {
+                modelSelect.value = savedModel;
+            } else if (modelSelect.options.length > 1) {
+                // 默认选中第一个可用模型 (index 0 是占位符)
+                modelSelect.selectedIndex = 1;
             }
-            return false;
+            return modelSelect.value !== '';
         }
 
         // Load available models
