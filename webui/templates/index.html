@@ -543,10 +543,25 @@
                 <div id="panel-online" class="data-panel">
                     <!-- 在线获取 A 股实时数据 -->
                     <div class="form-group">
-                        <label for="stock-symbol" data-i18n="online_symbol_label">股票代码：</label>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="text" id="stock-symbol" placeholder="000001" style="flex: 1;" onkeydown="if(event.key==='Enter')fetchStockData()">
-                            <select id="stock-period" style="width: 110px;">
+                        <label for="stock-symbol-select" data-i18n="online_symbol_label">股票代码：</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="stock-symbol-select" style="flex: 1;">
+                                <option value="000001">平安银行 000001</option>
+                                <option value="600519">贵州茅台 600519</option>
+                                <option value="000858">五粮液 000858</option>
+                                <option value="002594">比亚迪 002594</option>
+                                <option value="300750">宁德时代 300750</option>
+                                <option value="600036">招商银行 600036</option>
+                                <option value="601318">中国平安 601318</option>
+                                <option value="601398">工商银行 601398</option>
+                                <option value="600030">中信证券 600030</option>
+                                <option value="000333">美的集团 000333</option>
+                                <option value="601899">紫金矿业 601899</option>
+                                <option value="600900">长江电力 600900</option>
+                            </select>
+                            <input type="text" id="stock-symbol-input" placeholder="000001" style="flex: 1; display: none;" onkeydown="if(event.key==='Enter')fetchStockData()">
+                            <button id="symbol-mode-btn" type="button" title="手动输入" style="width: 40px; height: 40px; border: 2px solid #e2e8f0; border-radius: 8px; background: white; cursor: pointer; font-size: 16px; flex-shrink: 0;" onclick="toggleSymbolMode()">✏️</button>
+                            <select id="stock-period" style="width: 100px; flex-shrink: 0;">
                                 <option value="daily" data-i18n="period_daily">日线</option>
                                 <option value="5" data-i18n="period_5m">5分钟</option>
                                 <option value="15" data-i18n="period_15m">15分钟</option>
@@ -554,7 +569,7 @@
                                 <option value="60" data-i18n="period_60m">60分钟</option>
                             </select>
                         </div>
-                        <small class="form-text" data-i18n="online_symbol_hint">输入 A 股代码（如 000001、600519），拉取新浪实时行情；6/9 开头自动识别为沪市</small>
+                        <small class="form-text" data-i18n="online_symbol_hint">选择常用股票或点击 ✏️ 手动输入代码（6/9 开头自动识别为沪市）</small>
                     </div>
                     <button id="fetch-stock-btn" class="btn btn-warning">
                         📡 <span data-i18n="fetch_stock_btn">获取实时数据</span>
@@ -892,7 +907,7 @@
                 predict_failed: ({err}) => `Prediction failed: ${err}`,
                 actual_points: ({n}) => `${n} actual data points`,
                 online_symbol_label: 'Stock Code:',
-                online_symbol_hint: 'Enter A-share code (e.g. 000001, 600519) to fetch live data from Sina; codes starting with 6/9 are Shanghai stocks',
+                online_symbol_hint: 'Select a popular stock or click ✏️ to enter a custom code (codes starting with 6/9 are Shanghai stocks)',
                 fetch_stock_btn: 'Fetch Live Data',
                 period_daily: 'Daily', period_5m: '5 min', period_15m: '15 min', period_30m: '30 min', period_60m: '60 min',
                 fetch_stock_empty: 'Please enter a stock code',
@@ -1049,9 +1064,40 @@
             document.getElementById('panel-online').style.display = tab === 'online' ? 'block' : 'none';
         }
 
+        // 切换股票代码输入方式 (下拉框 ⇄ 手动输入)
+        let symbolInputMode = false;
+
+        function toggleSymbolMode() {
+            symbolInputMode = !symbolInputMode;
+            const sel = document.getElementById('stock-symbol-select');
+            const inp = document.getElementById('stock-symbol-input');
+            const btn = document.getElementById('symbol-mode-btn');
+            
+            if (symbolInputMode) {
+                inp.value = sel.value;  // 把当前选中代码带过去
+                sel.style.display = 'none';
+                inp.style.display = 'block';
+                btn.textContent = '📋';
+                btn.title = currentLang === 'zh' ? '返回列表选择' : 'Back to list';
+                inp.focus();
+            } else {
+                sel.style.display = 'block';
+                inp.style.display = 'none';
+                btn.textContent = '✏️';
+                btn.title = currentLang === 'zh' ? '手动输入' : 'Manual input';
+            }
+        }
+
+        // 获取当前股票代码
+        function getSymbol() {
+            return symbolInputMode
+                ? document.getElementById('stock-symbol-input').value.trim()
+                : document.getElementById('stock-symbol-select').value;
+        }
+
         // Fetch live A-share data from Sina
         async function fetchStockData() {
-            const symbol = document.getElementById('stock-symbol').value.trim();
+            const symbol = getSymbol();
             const period = document.getElementById('stock-period').value;
             
             if (!symbol) {
