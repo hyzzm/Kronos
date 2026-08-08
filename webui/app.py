@@ -95,27 +95,33 @@ BASE_MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__
 AVAILABLE_MODELS = {
     'kronos-mini': {
         'name': 'Kronos-mini',
+        'name_zh': '迷你模型',
         'model_id': os.path.join(BASE_MODEL_DIR, 'Kronos-mini'),
         'tokenizer_id': os.path.join(BASE_MODEL_DIR, 'Kronos-Tokenizer-2k'),
         'context_length': 2048,
         'params': '4.1M',
-        'description': 'Lightweight model, suitable for fast prediction'
+        'description': 'Lightweight model, suitable for fast prediction',
+        'desc_zh': '轻量级，预测超快，适合快速试算和批量扫描'
     },
     'kronos-small': {
         'name': 'Kronos-small',
+        'name_zh': '小型模型',
         'model_id': os.path.join(BASE_MODEL_DIR, 'Kronos-small'),
         'tokenizer_id': os.path.join(BASE_MODEL_DIR, 'Kronos-Tokenizer-base'),
         'context_length': 512,
         'params': '24.7M',
-        'description': 'Small model, balanced performance and speed'
+        'description': 'Small model, balanced performance and speed',
+        'desc_zh': '速度与精度均衡，日常预测首选'
     },
     'kronos-base': {
         'name': 'Kronos-base',
+        'name_zh': '基础模型',
         'model_id': os.path.join(BASE_MODEL_DIR, 'Kronos-base'),
         'tokenizer_id': os.path.join(BASE_MODEL_DIR, 'Kronos-Tokenizer-base'),
         'context_length': 512,
         'params': '102.3M',
-        'description': 'Base model, better prediction quality'
+        'description': 'Base model, better prediction quality',
+        'desc_zh': '参数量最大，预测质量最好，适合正式分析'
     }
 }
 
