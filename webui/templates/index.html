@@ -1121,14 +1121,16 @@
         function showDataInfo(dataInfo) {
             document.getElementById('data-info').style.display = 'block';
             document.getElementById('data-rows').textContent = dataInfo.rows;
-            document.getElementById('data-cols').textContent = dataInfo.columns.length;
+            document.getElementById('data-cols').textContent = dataInfo.columns ? dataInfo.columns.length : '-';
             document.getElementById('data-time-range').textContent = `${dataInfo.start_date} to ${dataInfo.end_date}`;
-            document.getElementById('data-price-range').textContent = `${dataInfo.price_range.min.toFixed(4)} - ${dataInfo.price_range.max.toFixed(4)}`;
-            document.getElementById('data-timeframe').textContent = dataInfo.timeframe;
-            document.getElementById('data-prediction-cols').textContent = dataInfo.prediction_columns.join(', ');
+            document.getElementById('data-price-range').textContent = dataInfo.price_range ? `${dataInfo.price_range.min.toFixed(4)} - ${dataInfo.price_range.max.toFixed(4)}` : '-';
+            document.getElementById('data-timeframe').textContent = dataInfo.timeframe || '-';
+            document.getElementById('data-prediction-cols').textContent = dataInfo.prediction_columns ? dataInfo.prediction_columns.join(', ') : '-';
             
-            // Initialize time window slider
-            initializeTimeWindowSlider(dataInfo);
+            // Initialize time window slider (仅文件模式有完整时间窗语义, 在线模式跳过避免报错)
+            if (dataInfo.timeframe && dataInfo.rows) {
+                initializeTimeWindowSlider(dataInfo);
+            }
         }
 
                     // Time window slider related variables

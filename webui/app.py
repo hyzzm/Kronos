@@ -431,10 +431,12 @@ def fetch_stock():
             'period': period,
             'period_desc': desc_zh if get_lang() == 'zh' else desc_en,
             'rows': int(len(df)),
-            'start_date': str(df['timestamps'].iloc[0]),
-            'end_date': str(df['timestamps'].iloc[-1]),
-            'price_min': float(df['close'].min()),
-            'price_max': float(df['close'].max()),
+            'columns': ['open', 'high', 'low', 'close', 'volume', 'amount'],
+            'start_date': df['timestamps'].iloc[0].isoformat(),
+            'end_date': df['timestamps'].iloc[-1].isoformat(),
+            'price_range': {'min': float(df['close'].min()), 'max': float(df['close'].max())},
+            'timeframe': desc_zh if get_lang() == 'zh' else desc_en,
+            'prediction_columns': ['open', 'high', 'low', 'close', 'volume'],
             'last_close': float(df['close'].iloc[-1]),
         }
 
