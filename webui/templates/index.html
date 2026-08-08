@@ -248,7 +248,37 @@
             color: #2d3748;
         }
 
-        /* Time window selector styles */
+        /* 数据源 Tab 切换 */
+        .data-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .data-tab {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            color: #4a5568;
+            transition: all 0.2s;
+        }
+
+        .data-tab:hover {
+            border-color: #667eea;
+        }
+
+        .data-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        /* 时间窗口 selector styles */
         .time-window-container {
             background: #f7fafc;
             border: 1px solid #e2e8f0;
@@ -503,40 +533,50 @@
 
                 <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
 
-                <!-- Data File Selection -->
-                <div class="form-group">
-                    <label for="data-file-select" data-i18n="select_data_label">选择数据文件：</label>
-                    <select id="data-file-select">
-                        <option value="" data-i18n="data_placeholder">请先加载数据文件列表</option>
-                    </select>
-                    <small class="form-text" data-i18n="select_data_hint">从数据目录选择 K 线数据文件</small>
+                <!-- 数据源 Tab 切换 -->
+                <div class="data-tabs">
+                    <button id="tab-file" class="data-tab active" onclick="switchDataTab('file')">📁 <span data-i18n="tab_file">文件数据</span></button>
+                    <button id="tab-online" class="data-tab" onclick="switchDataTab('online')">📡 <span data-i18n="tab_online">实时数据</span></button>
                 </div>
 
-                <button id="load-data-btn" class="btn btn-secondary">
-                    📁 <span data-i18n="load_data_btn">加载数据</span>
-                </button>
-
-                <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
-
-                <!-- 在线获取 A 股实时数据 -->
-                <div class="form-group">
-                    <label for="stock-symbol" data-i18n="online_symbol_label">股票代码：</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="stock-symbol" placeholder="000001" style="flex: 1;" onkeydown="if(event.key==='Enter')fetchStockData()">
-                        <select id="stock-period" style="width: 110px;">
-                            <option value="daily" data-i18n="period_daily">日线</option>
-                            <option value="5" data-i18n="period_5m">5分钟</option>
-                            <option value="15" data-i18n="period_15m">15分钟</option>
-                            <option value="30" data-i18n="period_30m">30分钟</option>
-                            <option value="60" data-i18n="period_60m">60分钟</option>
+                <!-- 文件数据面板 -->
+                <div id="panel-file" class="data-panel">
+                    <!-- Data File Selection -->
+                    <div class="form-group">
+                        <label for="data-file-select" data-i18n="select_data_label">选择数据文件：</label>
+                        <select id="data-file-select">
+                            <option value="" data-i18n="data_placeholder">请先加载数据文件列表</option>
                         </select>
+                        <small class="form-text" data-i18n="select_data_hint">从数据目录选择 K 线数据文件</small>
                     </div>
-                    <small class="form-text" data-i18n="online_symbol_hint">输入 A 股代码（如 000001、600519），拉取新浪实时行情；6/9 开头自动识别为沪市</small>
+
+                    <button id="load-data-btn" class="btn btn-secondary">
+                        📁 <span data-i18n="load_data_btn">加载数据</span>
+                    </button>
                 </div>
-                <button id="fetch-stock-btn" class="btn btn-warning">
-                    📡 <span data-i18n="fetch_stock_btn">获取实时数据</span>
-                </button>
-                <div id="online-status" class="status info" style="display: none;"></div>
+
+                <!-- 实时数据面板 -->
+                <div id="panel-online" class="data-panel" style="display: none;">
+                    <!-- 在线获取 A 股实时数据 -->
+                    <div class="form-group">
+                        <label for="stock-symbol" data-i18n="online_symbol_label">股票代码：</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="stock-symbol" placeholder="000001" style="flex: 1;" onkeydown="if(event.key==='Enter')fetchStockData()">
+                            <select id="stock-period" style="width: 110px;">
+                                <option value="daily" data-i18n="period_daily">日线</option>
+                                <option value="5" data-i18n="period_5m">5分钟</option>
+                                <option value="15" data-i18n="period_15m">15分钟</option>
+                                <option value="30" data-i18n="period_30m">30分钟</option>
+                                <option value="60" data-i18n="period_60m">60分钟</option>
+                            </select>
+                        </div>
+                        <small class="form-text" data-i18n="online_symbol_hint">输入 A 股代码（如 000001、600519），拉取新浪实时行情；6/9 开头自动识别为沪市</small>
+                    </div>
+                    <button id="fetch-stock-btn" class="btn btn-warning">
+                        📡 <span data-i18n="fetch_stock_btn">获取实时数据</span>
+                    </button>
+                    <div id="online-status" class="status info" style="display: none;"></div>
+                </div>
 
                 <!-- Data Information Display -->
                 <div id="data-info" class="data-info" style="display: none;">
@@ -770,7 +810,9 @@
                 fetch_stock_btn: '获取实时数据',
                 period_daily: '日线', period_5m: '5分钟', period_15m: '15分钟', period_30m: '30分钟', period_60m: '60分钟',
                 fetch_stock_empty: '请输入股票代码',
-                fetch_stock_failed: ({err}) => `获取实时数据失败：${err}`
+                fetch_stock_failed: ({err}) => `获取实时数据失败：${err}`,
+                tab_file: '文件数据',
+                tab_online: '实时数据'
             },
             en: {
                 title: '🚀 Kronos Financial Prediction Platform',
@@ -854,7 +896,9 @@
                 fetch_stock_btn: 'Fetch Live Data',
                 period_daily: 'Daily', period_5m: '5 min', period_15m: '15 min', period_30m: '30 min', period_60m: '60 min',
                 fetch_stock_empty: 'Please enter a stock code',
-                fetch_stock_failed: ({err}) => `Failed to fetch live data: ${err}`
+                fetch_stock_failed: ({err}) => `Failed to fetch live data: ${err}`,
+                tab_file: 'File Data',
+                tab_online: 'Live Data'
             }
         };
 
@@ -995,6 +1039,14 @@
             } catch (error) {
                 console.error('❌ Failed to get model status:', error);
             }
+        }
+
+        // 切换数据源 Tab (文件 / 实时)
+        function switchDataTab(tab) {
+            document.getElementById('tab-file').classList.toggle('active', tab === 'file');
+            document.getElementById('tab-online').classList.toggle('active', tab === 'online');
+            document.getElementById('panel-file').style.display = tab === 'file' ? 'block' : 'none';
+            document.getElementById('panel-online').style.display = tab === 'online' ? 'block' : 'none';
         }
 
         // Fetch live A-share data from Sina
