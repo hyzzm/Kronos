@@ -967,7 +967,32 @@
             // Initialize time slider
             initializeTimeSlider();
             
+            // 恢复上次选择的模型/设备, 并自动加载 (不用手动点)
+            if (restoreModelPrefs()) {
+                await loadModel();
+            }
+            
             console.log('✅ Application initialization completed');
+        }
+
+        // 恢复上次的模型/设备选择; 有记录且模型存在则返回 true
+        function restoreModelPrefs() {
+            const savedDevice = localStorage.getItem('kronos_device');
+            if (savedDevice) {
+                const deviceSelect = document.getElementById('device-select');
+                if ([...deviceSelect.options].some(o => o.value === savedDevice)) {
+                    deviceSelect.value = savedDevice;
+                }
+            }
+            const savedModel = localStorage.getItem('kronos_model');
+            if (savedModel) {
+                const modelSelect = document.getElementById('model-select');
+                if ([...modelSelect.options].some(o => o.value === savedModel)) {
+                    modelSelect.value = savedModel;
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Load available models
@@ -1022,6 +1047,9 @@
                 
                 if (response.data.success) {
                     modelLoaded = true;
+                    // 记住模型/设备选择, 下次打开自动加载
+                    localStorage.setItem('kronos_model', modelKey);
+                    localStorage.setItem('kronos_device', device);
                     showStatus('success', response.data.message);
                     updateModelStatus();
                     document.getElementById('predict-btn').disabled = false;
