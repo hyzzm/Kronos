@@ -11,6 +11,13 @@ import warnings
 import datetime
 warnings.filterwarnings('ignore')
 
+try:
+    import akshare as ak
+    AKSHARE_AVAILABLE = True
+except ImportError:
+    AKSHARE_AVAILABLE = False
+    print("Warning: akshare not installed, online stock fetching will be unavailable")
+
 # Add project root directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -38,6 +45,44 @@ def t(zh_text, en_text):
     """按请求语言返回文案"""
     return zh_text if get_lang() == 'zh' else en_text
 
+
+# ============ 在线 A 股数据 (新浪) ============
+ONLINE_CACHE = {}  # cache_key -> {'df': DataFrame(升序), 'symbol': str, 'period': str}
+PERIOD_DESC = {
+    'daily': ('日线', 'daily'),
+    '5': ('5分钟', '5 min'),
+    '15': ('15分钟', '15 min'),
+    '30': ('30分钟', '30 min'),
+    '60': ('60分钟', '60 min'),
+}
+
+
+def fetch_online_stock(symbol, period='daily'):
+    """新浪接口拉取 A 股数据, 返回升序 DataFrame (timestamps 列) 或抛异常"""
+    prefix = 'sh' if symbol.startswith(('6', '9')) else 'sz'
+    full_symbol = f"{prefix}{symbol}"
+
+    if period == 'daily':
+        df = ak.stock_zh_a_daily(symbol=full_symbol, adjust="qfq")
+        df = df[['date', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
+        df['timestamps'] = pd.to_datetime(df['date'])
+    else:
+        # 分钟线: period in 5/15/30/60
+        df = ak.stock_zh_a_minute(symbol=full_symbol, period=period, adjust='qfq')
+        df = df[['day', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
+        df['timestamps'] = pd.to_datetime(df['day'])
+
+    df = df.sort_values('timestamps').reset_index(drop=True)
+    for col in ['open', 'high', 'low', 'close', 'volume', 'amount']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df = df.dropna(subset=['open', 'high', 'low', 'close'])
+
+    # 缺失/为0的成交额用 close*volume 补
+    if df['amount'].isna().all() or (df['amount'] == 0).all():
+        df['amount'] = df['close'] * df['volume']
+
+    return df
+
 # Global variables to store models
 tokenizer = None
 model = None
@@ -63,6 +108,14 @@ AVAILABLE_MODELS = {
         'context_length': 512,
         'params': '24.7M',
         'description': 'Small model, balanced performance and speed'
+    },
+    'kronos-base': {
+        'name': 'Kronos-base',
+        'model_id': os.path.join(BASE_MODEL_DIR, 'Kronos-base'),
+        'tokenizer_id': os.path.join(BASE_MODEL_DIR, 'Kronos-Tokenizer-base'),
+        'context_length': 512,
+        'params': '102.3M',
+        'description': 'Base model, better prediction quality'
     }
 }
 
@@ -348,6 +401,54 @@ def get_data_files():
     data_files = load_data_files()
     return jsonify(data_files)
 
+@app.route('/api/fetch-stock', methods=['POST'])
+def fetch_stock():
+    """在线获取 A 股实时数据 (新浪), 缓存供预测使用"""
+    try:
+        if not AKSHARE_AVAILABLE:
+            return jsonify({'error': t('akshare 未安装，无法在线获取数据', 'akshare not installed, cannot fetch data online')}), 500
+
+        data = request.get_json()
+        symbol = str(data.get('symbol', '')).strip()
+        period = str(data.get('period', 'daily')).strip()
+
+        if not symbol:
+            return jsonify({'error': t('请输入股票代码', 'Please enter a stock code')}), 400
+        if period not in PERIOD_DESC:
+            period = 'daily'
+
+        df = fetch_online_stock(symbol, period)
+        if df is None or len(df) < 520:
+            return jsonify({'error': t(f'{symbol} 数据不足（仅 {len(df) if df is not None else 0} 行），至少需要 520 根K线',
+                                      f'Insufficient data for {symbol} ({len(df) if df is not None else 0} rows), need at least 520 bars')}), 400
+
+        key = f"{symbol}:{period}"
+        ONLINE_CACHE[key] = {'df': df, 'symbol': symbol, 'period': period}
+
+        desc_zh, desc_en = PERIOD_DESC[period]
+        data_info = {
+            'symbol': symbol,
+            'period': period,
+            'period_desc': desc_zh if get_lang() == 'zh' else desc_en,
+            'rows': int(len(df)),
+            'start_date': str(df['timestamps'].iloc[0]),
+            'end_date': str(df['timestamps'].iloc[-1]),
+            'price_min': float(df['close'].min()),
+            'price_max': float(df['close'].max()),
+            'last_close': float(df['close'].iloc[-1]),
+        }
+
+        return jsonify({
+            'success': True,
+            'cache_key': key,
+            'data_info': data_info,
+            'message': t(f'已获取 {symbol} {desc_zh}：{len(df)} 行，最新 {df["timestamps"].iloc[-1]}',
+                         f'Fetched {symbol} {desc_en}: {len(df)} rows, latest {df["timestamps"].iloc[-1]}')
+        })
+    except Exception as e:
+        return jsonify({'error': t(f'获取实时数据失败: {str(e)}', f'Failed to fetch live data: {str(e)}')}), 500
+
+
 @app.route('/api/load-data', methods=['POST'])
 def load_data():
     """Load data file"""
@@ -425,13 +526,22 @@ def predict():
         top_p = float(data.get('top_p', 0.9))
         sample_count = int(data.get('sample_count', 1))
         
-        if not file_path:
-            return jsonify({'error': t('文件路径不能为空', 'File path cannot be empty')}), 400
+        # 在线数据模式: 优先使用缓存的新浪实时数据
+        online_key = data.get('online_key')
+        online_entry = ONLINE_CACHE.get(online_key) if online_key else None
+        online_df = online_entry['df'] if online_entry else None
+        online_symbol = online_entry['symbol'] if online_entry else None
+        online_period = online_entry['period'] if online_entry else None
         
-        # Load data
-        df, error = load_data_file(file_path)
-        if error:
-            return jsonify({'error': error}), 400
+        if online_df is not None:
+            df = online_df
+        elif not file_path:
+            return jsonify({'error': t('文件路径不能为空', 'File path cannot be empty')}), 400
+        else:
+            # Load data
+            df, error = load_data_file(file_path)
+            if error:
+                return jsonify({'error': error}), 400
         
         if len(df) < lookback:
             return jsonify({'error': t(f'数据长度不足，至少需要 {lookback} 行', f'Insufficient data length, need at least {lookback} rows')}), 400
@@ -476,11 +586,26 @@ def predict():
                     prediction_type = t(f"Kronos 模型预测（选定窗口：前 {lookback} 个数据点用于预测，后 {pred_len} 个用于对比，时间跨度：{time_span}）",
                                         f"Kronos model prediction (within selected window: first {lookback} data points for prediction, last {pred_len} data points for comparison, time span: {time_span})")
                 else:
-                    # Use latest data
-                    x_df = df.iloc[:lookback][required_cols]
-                    x_timestamp = df.iloc[:lookback]['timestamps']
-                    y_timestamp = df.iloc[lookback:lookback+pred_len]['timestamps']
-                    prediction_type = t("Kronos 模型预测（最新数据）", "Kronos model prediction (latest data)")
+                    if online_df is not None:
+                        # 在线数据: 用最近 lookback 根预测, y 为未来时间戳
+                        x_df = df.iloc[-lookback:][required_cols]
+                        x_timestamp = df.iloc[-lookback:]['timestamps'].reset_index(drop=True)
+                        last_ts = df['timestamps'].iloc[-1]
+                        if online_period == 'daily':
+                            y_timestamp = pd.Series(pd.bdate_range(start=last_ts + pd.Timedelta(days=1), periods=pred_len))
+                        else:
+                            y_timestamp = pd.Series(pd.date_range(
+                                start=last_ts + pd.Timedelta(minutes=int(online_period)),
+                                periods=pred_len, freq=f"{online_period}T"))
+                        pred_desc = '日线' if online_period == 'daily' else f'{online_period}分钟'
+                        prediction_type = t(f'Kronos 模型预测（{online_symbol} {pred_desc}，未来 {pred_len} 根K线）',
+                                            f'Kronos prediction ({online_symbol} {online_period}, next {pred_len} bars)')
+                    else:
+                        # Use latest data
+                        x_df = df.iloc[:lookback][required_cols]
+                        x_timestamp = df.iloc[:lookback]['timestamps']
+                        y_timestamp = df.iloc[lookback:lookback+pred_len]['timestamps']
+                        prediction_type = t("Kronos 模型预测（最新数据）", "Kronos model prediction (latest data)")
                 
                 # Ensure timestamps are Series format, not DatetimeIndex, to avoid .dt attribute error in Kronos model
                 if isinstance(x_timestamp, pd.DatetimeIndex):
@@ -507,7 +632,11 @@ def predict():
         actual_data = []
         actual_df = None
         
-        if start_date:  # Custom time period
+        if online_df is not None:
+            # 在线数据: 预测的是未来, 没有真实值可对比
+            actual_df = None
+            actual_data = []
+        elif start_date:  # Custom time period
             # Fix logic: use data within selected window
             # Prediction uses first 400 data points within selected window
             # Actual data should be last 120 data points within selected window
@@ -548,7 +677,10 @@ def predict():
                     })
         
         # Create chart - pass historical data start position
-        if start_date:
+        if online_df is not None:
+            # 在线数据: 展示最近 lookback 根作为历史
+            historical_start_idx = len(df) - lookback
+        elif start_date:
             # Custom time period: find starting position of historical data in original df
             start_dt = pd.to_datetime(start_date)
             mask = df['timestamps'] >= start_dt
@@ -560,7 +692,10 @@ def predict():
         chart_json = create_prediction_chart(df, pred_df, lookback, pred_len, actual_df, historical_start_idx)
         
         # Prepare prediction result data - fix timestamp calculation logic
-        if 'timestamps' in df.columns:
+        if online_df is not None:
+            # 在线数据: 直接用未来时间戳
+            future_timestamps = y_timestamp
+        elif 'timestamps' in df.columns:
             if start_date:
                 # Custom time period: use selected window data to calculate timestamps
                 start_dt = pd.to_datetime(start_date)
@@ -605,7 +740,7 @@ def predict():
         # Save prediction results to file
         try:
             save_prediction_results(
-                file_path=file_path,
+                file_path=file_path or online_key or 'online',
                 prediction_type=prediction_type,
                 prediction_results=prediction_results,
                 actual_data=actual_data,

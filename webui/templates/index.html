@@ -516,6 +516,28 @@
                     📁 <span data-i18n="load_data_btn">加载数据</span>
                 </button>
 
+                <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
+
+                <!-- 在线获取 A 股实时数据 -->
+                <div class="form-group">
+                    <label for="stock-symbol" data-i18n="online_symbol_label">股票代码：</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="stock-symbol" placeholder="000001" style="flex: 1;" onkeydown="if(event.key==='Enter')fetchStockData()">
+                        <select id="stock-period" style="width: 110px;">
+                            <option value="daily" data-i18n="period_daily">日线</option>
+                            <option value="5" data-i18n="period_5m">5分钟</option>
+                            <option value="15" data-i18n="period_15m">15分钟</option>
+                            <option value="30" data-i18n="period_30m">30分钟</option>
+                            <option value="60" data-i18n="period_60m">60分钟</option>
+                        </select>
+                    </div>
+                    <small class="form-text" data-i18n="online_symbol_hint">输入 A 股代码（如 000001、600519），拉取新浪实时行情；6/9 开头自动识别为沪市</small>
+                </div>
+                <button id="fetch-stock-btn" class="btn btn-warning">
+                    📡 <span data-i18n="fetch_stock_btn">获取实时数据</span>
+                </button>
+                <div id="online-status" class="status info" style="display: none;"></div>
+
                 <!-- Data Information Display -->
                 <div id="data-info" class="data-info" style="display: none;">
                     <h3 data-i18n="data_info_title">📊 数据信息</h3>
@@ -661,6 +683,7 @@
         let currentDataInfo = null;
         let availableModels = [];
         let modelLoaded = false;
+        let currentOnlineKey = null;  // 在线获取的数据缓存 key
         let currentLang = 'zh';
 
         // ============ 国际化 (i18n) ============
@@ -741,7 +764,13 @@
                 load_model_first: '请先加载模型',
                 slider_not_init: '时间窗口滑块未初始化',
                 predict_failed: ({err}) => `预测失败：${err}`,
-                actual_points: ({n}) => `${n} 个实际数据点`
+                actual_points: ({n}) => `${n} 个实际数据点`,
+                online_symbol_label: '股票代码：',
+                online_symbol_hint: '输入 A 股代码（如 000001、600519），拉取新浪实时行情；6/9 开头自动识别为沪市',
+                fetch_stock_btn: '获取实时数据',
+                period_daily: '日线', period_5m: '5分钟', period_15m: '15分钟', period_30m: '30分钟', period_60m: '60分钟',
+                fetch_stock_empty: '请输入股票代码',
+                fetch_stock_failed: ({err}) => `获取实时数据失败：${err}`
             },
             en: {
                 title: '🚀 Kronos Financial Prediction Platform',
@@ -819,7 +848,13 @@
                 load_model_first: 'Please load model first',
                 slider_not_init: 'Time window slider not initialized',
                 predict_failed: ({err}) => `Prediction failed: ${err}`,
-                actual_points: ({n}) => `${n} actual data points`
+                actual_points: ({n}) => `${n} actual data points`,
+                online_symbol_label: 'Stock Code:',
+                online_symbol_hint: 'Enter A-share code (e.g. 000001, 600519) to fetch live data from Sina; codes starting with 6/9 are Shanghai stocks',
+                fetch_stock_btn: 'Fetch Live Data',
+                period_daily: 'Daily', period_5m: '5 min', period_15m: '15 min', period_30m: '30 min', period_60m: '60 min',
+                fetch_stock_empty: 'Please enter a stock code',
+                fetch_stock_failed: ({err}) => `Failed to fetch live data: ${err}`
             }
         };
 
@@ -960,6 +995,62 @@
             } catch (error) {
                 console.error('❌ Failed to get model status:', error);
             }
+        }
+
+        // Fetch live A-share data from Sina
+        async function fetchStockData() {
+            const symbol = document.getElementById('stock-symbol').value.trim();
+            const period = document.getElementById('stock-period').value;
+            
+            if (!symbol) {
+                showStatus('error', tr('fetch_stock_empty'));
+                return;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('fetch-stock-btn').disabled = true;
+                
+                const response = await axios.post('/api/fetch-stock', {
+                    symbol: symbol,
+                    period: period
+                });
+                
+                if (response.data.success) {
+                    currentOnlineKey = response.data.cache_key;
+                    currentDataFile = null;
+                    currentDataInfo = response.data.data_info;
+                    showDataInfo(response.data.data_info);
+                    showOnlineStatus('success', response.data.message);
+                    console.log('✅ Live data fetched:', response.data.cache_key);
+                    
+                    // Enable prediction button if model is loaded
+                    if (modelLoaded) {
+                        document.getElementById('predict-btn').disabled = false;
+                    }
+                } else {
+                    showOnlineStatus('error', response.data.error);
+                }
+            } catch (error) {
+                console.error('❌ Fetch live data failed:', error);
+                showOnlineStatus('error', tr('fetch_stock_failed', {err: error.response?.data?.error || error.message}));
+            } finally {
+                showLoading(false);
+                document.getElementById('fetch-stock-btn').disabled = false;
+            }
+        }
+
+        // Show online fetch status
+        function showOnlineStatus(type, message) {
+            const statusDiv = document.getElementById('online-status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide after 8s (keep longer for data info)
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 8000);
         }
 
         // Load data file list
@@ -1242,7 +1333,7 @@
 
         // Start prediction
         async function startPrediction() {
-            if (!currentDataFile) {
+            if (!currentDataFile && !currentOnlineKey) {
                 showStatus('error', tr('load_data_first'));
                 return;
             }
@@ -1259,34 +1350,39 @@
                 const lookback = parseInt(document.getElementById('lookback').value);
                 const predLen = parseInt(document.getElementById('pred-len').value);
                 
-                // Get selected time range from time window slider
-                const startHandle = document.getElementById('start-handle');
-                const startPercentage = parseFloat(startHandle.style.left) / 100;
-                
-                if (!sliderData) {
-                    showStatus('error', tr('slider_not_init'));
-                    return;
-                }
-                
-                // Calculate selected time range
-                const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
-                const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
-                const startDate = new Date(startTime);
-                
                 // Get prediction quality parameters
                 const temperature = parseFloat(document.getElementById('temperature').value);
                 const topP = parseFloat(document.getElementById('top-p').value);
                 const sampleCount = parseInt(document.getElementById('sample-count').value);
                 
                 let predictionParams = {
-                    file_path: currentDataFile,
                     lookback: lookback,
                     pred_len: predLen,
-                    start_date: startDate.toISOString().slice(0, 16), // Format as YYYY-MM-DDTHH:MM
                     temperature: temperature,
                     top_p: topP,
                     sample_count: sampleCount
                 };
+                
+                if (currentOnlineKey) {
+                    // 在线数据: 预测最新行情之后的未来K线
+                    predictionParams.online_key = currentOnlineKey;
+                } else if (currentDataFile) {
+                    // 文件数据: 走时间窗滑块选定的区间
+                    const startHandle = document.getElementById('start-handle');
+                    const startPercentage = parseFloat(startHandle.style.left) / 100;
+                    
+                    if (!sliderData) {
+                        showStatus('error', tr('slider_not_init'));
+                        return;
+                    }
+                    
+                    const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
+                    const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
+                    const startDate = new Date(startTime);
+                    
+                    predictionParams.file_path = currentDataFile;
+                    predictionParams.start_date = startDate.toISOString().slice(0, 16); // Format as YYYY-MM-DDTHH:MM
+                }
                 
                 console.log('🚀 Starting prediction, parameters:', predictionParams);
                 
@@ -1405,6 +1501,9 @@
             
             // Load data button
             document.getElementById('load-data-btn').addEventListener('click', loadData);
+            
+            // Fetch live data button
+            document.getElementById('fetch-stock-btn').addEventListener('click', fetchStockData);
             
             // Prediction button
             document.getElementById('predict-btn').addEventListener('click', startPrediction);
