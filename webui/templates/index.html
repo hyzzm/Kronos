@@ -535,28 +535,12 @@
 
                 <!-- 数据源 Tab 切换 -->
                 <div class="data-tabs">
-                    <button id="tab-file" class="data-tab active" onclick="switchDataTab('file')">📁 <span data-i18n="tab_file">文件数据</span></button>
-                    <button id="tab-online" class="data-tab" onclick="switchDataTab('online')">📡 <span data-i18n="tab_online">实时数据</span></button>
+                    <button id="tab-online" class="data-tab active" onclick="switchDataTab('online')">📡 <span data-i18n="tab_online">实时数据</span></button>
+                    <button id="tab-file" class="data-tab" onclick="switchDataTab('file')">📁 <span data-i18n="tab_file">文件数据</span></button>
                 </div>
 
-                <!-- 文件数据面板 -->
-                <div id="panel-file" class="data-panel">
-                    <!-- Data File Selection -->
-                    <div class="form-group">
-                        <label for="data-file-select" data-i18n="select_data_label">选择数据文件：</label>
-                        <select id="data-file-select">
-                            <option value="" data-i18n="data_placeholder">请先加载数据文件列表</option>
-                        </select>
-                        <small class="form-text" data-i18n="select_data_hint">从数据目录选择 K 线数据文件</small>
-                    </div>
-
-                    <button id="load-data-btn" class="btn btn-secondary">
-                        📁 <span data-i18n="load_data_btn">加载数据</span>
-                    </button>
-                </div>
-
-                <!-- 实时数据面板 -->
-                <div id="panel-online" class="data-panel" style="display: none;">
+                <!-- 实时数据面板 (默认) -->
+                <div id="panel-online" class="data-panel">
                     <!-- 在线获取 A 股实时数据 -->
                     <div class="form-group">
                         <label for="stock-symbol" data-i18n="online_symbol_label">股票代码：</label>
@@ -576,6 +560,22 @@
                         📡 <span data-i18n="fetch_stock_btn">获取实时数据</span>
                     </button>
                     <div id="online-status" class="status info" style="display: none;"></div>
+                </div>
+
+                <!-- 文件数据面板 -->
+                <div id="panel-file" class="data-panel" style="display: none;">
+                    <!-- Data File Selection -->
+                    <div class="form-group">
+                        <label for="data-file-select" data-i18n="select_data_label">选择数据文件：</label>
+                        <select id="data-file-select">
+                            <option value="" data-i18n="data_placeholder">请先加载数据文件列表</option>
+                        </select>
+                        <small class="form-text" data-i18n="select_data_hint">从数据目录选择 K 线数据文件</small>
+                    </div>
+
+                    <button id="load-data-btn" class="btn btn-secondary">
+                        📁 <span data-i18n="load_data_btn">加载数据</span>
+                    </button>
                 </div>
 
                 <!-- Data Information Display -->
