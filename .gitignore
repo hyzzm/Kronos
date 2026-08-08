@@ -74,3 +74,10 @@ venv.bak/
 temp/
 tmp/
 .python-version
+
+# 本地模型/数据/输出 (不提交)
+*.safetensors
+models/
+data/
+examples/outputs/
+webui/prediction_results/

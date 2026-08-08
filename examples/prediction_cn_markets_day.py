@@ -34,10 +34,10 @@ from model import Kronos, KronosTokenizer, KronosPredictor
 save_dir = "./outputs"
 os.makedirs(save_dir, exist_ok=True)
 
-# Setting
-TOKENIZER_PRETRAINED = "NeoQuasar/Kronos-Tokenizer-base"
-MODEL_PRETRAINED = "NeoQuasar/Kronos-base"
-DEVICE = "cpu"  # "cuda:0"
+# Setting (local paths, downloaded via hf-mirror)
+TOKENIZER_PRETRAINED = "../models/NeoQuasar/Kronos-Tokenizer-base"
+MODEL_PRETRAINED = "../models/NeoQuasar/Kronos-base"
+DEVICE = "mps"  # "cuda:0"
 MAX_CONTEXT = 512
 LOOKBACK = 400
 PRED_LEN = 120
@@ -46,15 +46,19 @@ TOP_P = 0.9
 SAMPLE_COUNT = 1
 
 def load_data(symbol: str) -> pd.DataFrame:
-    print(f"📥 Fetching {symbol} daily data from akshare ...")
+    print(f"📥 Fetching {symbol} daily data from sina (akshare) ...")
+
+    # 判断市场前缀: 6/9开头为上交所(sh), 其余为深交所(sz)
+    prefix = 'sh' if symbol.startswith(('6', '9')) else 'sz'
+    full_symbol = f"{prefix}{symbol}"
 
     max_retries = 3
     df = None
 
-    # Retry mechanism
+    # Retry mechanism (东财接口本机被断连, 改用新浪 stock_zh_a_daily)
     for attempt in range(1, max_retries + 1):
         try:
-            df = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="")
+            df = ak.stock_zh_a_daily(symbol=full_symbol, adjust="qfq")
             if df is not None and not df.empty:
                 break
         except Exception as e:
@@ -65,29 +69,15 @@ def load_data(symbol: str) -> pd.DataFrame:
     if df is None or df.empty:
         print(f"❌ Failed to fetch data for {symbol} after {max_retries} attempts. Exiting.")
         sys.exit(1)
-    
-    df.rename(columns={
-        "日期": "date",
-        "开盘": "open",
-        "收盘": "close",
-        "最高": "high",
-        "最低": "low",
-        "成交量": "volume",
-        "成交额": "amount"
-    }, inplace=True)
 
+    # 新浪接口已是英文列名, 只需要选择所需列
+    df = df[["date", "open", "high", "low", "close", "volume", "amount"]].copy()
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
 
     # Convert numeric columns
     numeric_cols = ["open", "high", "low", "close", "volume", "amount"]
     for col in numeric_cols:
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .replace({"--": None, "": None})
-        )
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Fix invalid open values
@@ -160,6 +150,9 @@ def predict_future(symbol):
     print(f"🚀 Loading Kronos tokenizer:{TOKENIZER_PRETRAINED} model:{MODEL_PRETRAINED} ...")
     tokenizer = KronosTokenizer.from_pretrained(TOKENIZER_PRETRAINED)
     model = Kronos.from_pretrained(MODEL_PRETRAINED)
+    # MPS 的 scaled_dot_product_attention 不支持 dropout，推理必须 eval 模式
+    tokenizer.eval()
+    model.eval()
     predictor = KronosPredictor(model, tokenizer, device=DEVICE, max_context=MAX_CONTEXT)
 
     df = load_data(symbol)
